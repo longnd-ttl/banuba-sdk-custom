@@ -74,7 +74,18 @@ public class BanubaSdkPluginImpl: NSObject, BanubaSdkManager, VideoRecorderDeleg
     
     func loadEffect(path: String, synchronously: Bool) {
         Self.logger.debug("loadEffect = \(path), synchronously = \(synchronously)")
-        banubaSdkManager.loadEffect(path, synchronous: synchronously)
+        if synchronously {
+            banubaSdkManager.loadEffect(path, synchronous: true)
+        } else {
+            // Dispatch async load to a background queue to avoid deadlocking the
+            // iOS main thread. The Pigeon handler runs on the main thread, and
+            // BanubaSdkManager.loadEffect() internally dispatches back to the main
+            // thread via DispatchQueue.main.sync — calling it directly from the
+            // Pigeon handler causes a main-thread deadlock.
+            DispatchQueue.global(qos: .default).async { [weak self] in
+                self?.banubaSdkManager.loadEffect(path, synchronous: false)
+            }
+        }
     }
     
     func unloadEffect() {
