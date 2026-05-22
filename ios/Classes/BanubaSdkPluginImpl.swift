@@ -39,7 +39,16 @@ public class BanubaSdkPluginImpl: NSObject, BanubaSdkManager, VideoRecorderDeleg
             clientTokenString: clientTokenString,
             logLevel: BNBSeverityLevel(rawValue: logLevel.rawValue) ?? .info
         )
-        banubaSdkManager.setup(configuration: configuration)
+        // setup() may require the main thread for internal Metal/GPU context creation.
+        // The Pigeon handler dispatches this call to a background thread, so we must
+        // bounce back to main if needed.
+        if Thread.isMainThread {
+            banubaSdkManager.setup(configuration: configuration)
+        } else {
+            DispatchQueue.main.sync {
+                self.banubaSdkManager.setup(configuration: self.configuration)
+            }
+        }
     }
     
     func attachWidget(banubaId: Int64) {

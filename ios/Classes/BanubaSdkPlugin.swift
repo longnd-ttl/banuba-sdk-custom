@@ -192,11 +192,17 @@ class BanubaSdkManagerSetup {
         let resourcePathArg = args[0] as! [String]
         let clientTokenStringArg = args[1] as! String
         let logLevelArg = args[2] as! SeverityLevel
-        do {
-          try api.initialize(resourcePath: resourcePathArg, clientTokenString: clientTokenStringArg, logLevel: logLevelArg)
-          reply(wrapResult(nil))
-        } catch {
-          reply(wrapError(error))
+        // Dispatch to background to avoid blocking the iOS main thread.
+        // BanubaSdkManager.initialize() performs license validation and ML model
+        // loading which can take several seconds; running it on the main thread
+        // blocks all other platform-channel calls and freezes the splash screen.
+        DispatchQueue.global(qos: .userInitiated).async {
+          do {
+            try api.initialize(resourcePath: resourcePathArg, clientTokenString: clientTokenStringArg, logLevel: logLevelArg)
+            DispatchQueue.main.async { reply(wrapResult(nil)) }
+          } catch {
+            DispatchQueue.main.async { reply(wrapError(error)) }
+          }
         }
       }
     } else {
@@ -295,11 +301,18 @@ class BanubaSdkManagerSetup {
         let args = message as! [Any?]
         let pathArg = args[0] as! String
         let synchronouslyArg = args[1] as! Bool
-        do {
-          try api.loadEffect(path: pathArg, synchronously: synchronouslyArg)
-          reply(wrapResult(nil))
-        } catch {
-          reply(wrapError(error))
+        // Dispatch to a background queue to avoid deadlocking the iOS main thread.
+        // BanubaSdkManager.loadEffect() internally dispatches back to the main
+        // thread via DispatchQueue.main.sync — calling it directly from the Pigeon
+        // handler (which runs on the main thread) causes a permanent main-thread
+        // deadlock that freezes the splash screen.
+        DispatchQueue.global(qos: .default).async {
+          do {
+            try api.loadEffect(path: pathArg, synchronously: synchronouslyArg)
+            DispatchQueue.main.async { reply(wrapResult(nil)) }
+          } catch {
+            DispatchQueue.main.async { reply(wrapError(error)) }
+          }
         }
       }
     } else {
